@@ -17,6 +17,7 @@
 #define E 28	//道路数
 
 typedef int Status;
+typedef char* ElemType;
 
 //邻接链表的结点类型
 typedef struct AdjVexNode {
@@ -52,6 +53,91 @@ typedef struct {
 	int prev;	//当前最短路径上该顶点的前驱顶点的位序
 	float lowcost;	//当前最短路径的长度
 } DistInfo;
+
+//链栈
+typedef struct LSNode {
+    ElemType data;
+    struct LSNode *next;
+} LSNode, *LStack;
+
+void InitStack_LS(LStack *S) {
+    *S = NULL;
+}
+
+//入栈
+Status Push_LS(LStack *S, ElemType e) {
+    LSNode *t;
+    t = (LSNode *)malloc(sizeof(LSNode));
+    if (NULL == t) {
+        return OVERFLOW;
+    }
+	t->data = e;
+    t->next = *S;   //新入栈元素指向原来的栈顶元素
+    *S = t;
+
+    return OK;
+}
+
+//出栈
+Status Pop_LS(LStack *S) {
+    LSNode *t;
+    if (NULL == *S) {
+        return ERROR;
+    }
+    t = *S;     //t指向原来的栈顶元素
+    *S = (*S)->next;
+    free(t);    //释放原来的栈顶元素
+
+    return OK;
+}
+
+void Print_LS(LStack S) {
+    int i;
+    int n = 0;  //栈内元素个数
+    LStack p;
+    p = S;
+    while (p != NULL) {
+        n++;
+        p = p->next;
+    }
+
+    p = S;
+    char ** c = (char **)malloc(sizeof(char *) * n);
+    for (i = 0; i < n; i++) {
+        c[i] = p->data;
+        p = p->next;
+    }
+    for (--i; i >= 0; i--) {
+        printf("%s  ", c[i]);
+    }
+}
+
+int FirstAdjVex_M(Map M, int k, AdjVexNode **p) {
+    if (k < 0 || k >= M.n) {
+        return -1;
+    }
+    *p = M.spots[k].firstArc;
+    if (*p != NULL) {
+        return (*p)->adjvex;
+    } else {
+        return -1;
+    }
+}
+
+int NextAdjVex_M(Map M, int k, AdjVexNode **p) {
+    if (k < 0 || k >= M.n) {
+        return -1;
+    }
+    if (NULL == *p) {
+        return -1;
+    }
+    *p = (*p)->nextArc;
+    if (*p != NULL) {
+        return (*p)->adjvex;
+    } else {
+        return -1;
+    }
+}
 
 //查找景点在地图中的位序
 int LocateVex_M(Map *M, ScenicSpot spot) {
@@ -432,6 +518,35 @@ Status removeSpot(Map * M, int index) {
     return OK;
 }
 
+//查询任意两个景点之间的所有简单路径
+Status DFS_T(Map M, LStack *S, int start, int end) {
+    int i;
+    AdjVexNode *p = NULL;
+    M.tags[start] = VISITED;
+    Push_LS(S, M.spots[start].name);
+
+    //遍历start顶点的邻接顶点
+    for (i = FirstAdjVex_M(M, start, &p); ; i = NextAdjVex_M(M, start, &p)) {
+        if (start == end) { //如果找到了顶点
+            //输出栈底到栈顶的元素
+            Print_LS(*S);
+            printf("\n");
+
+            Pop_LS(S);  //栈顶元素出栈
+            M.tags[start] = UNVISITED;    //并取消标记
+            break;  //退出循环
+        }
+        if (M.tags[i] != VISITED) { //如果该邻接顶点未标记
+            DFS_T(M, S, i, end);    //进入递归
+        }
+        if (i < 0) {  //遍历完所有邻接顶点后
+            Pop_LS(S);
+            M.tags[start] = UNVISITED;    //出栈并取消标记
+            break;  //退出循环
+        }
+    }
+}
+
 int main() {
 	Map *M = (Map *)malloc(sizeof(Map));
 	InitMap(M);
@@ -443,6 +558,8 @@ int main() {
 	int ops;
 	char *name;
 	char *intro;
+	int i;
+	LStack S;
 
 	printf("欢迎来到广东工业大学，本导游系统提供以下操作:\n");
 	commands();
@@ -499,7 +616,11 @@ int main() {
                 break;
 			//查询任意两个景点之间的所有简单路径
             case 3:
-
+                S = NULL;
+                for(i = 0; i < M->n; i++) {
+                    M->tags[i] = UNVISITED;
+                }
+                DFS_T(*M, &S, 9, 4);
                 break;
 			//查询途经多个景点的最佳（短）路径
             case 4:
@@ -557,10 +678,66 @@ int main() {
                         break;
                     //修改景点信息
                     case 3:
+                        s1 = -1;
+                        spots(*M);
+                        printf("请输入要修改的景点序号：");
+                        clearInput();
+                        scanf("%d", &s1);
+                        while (s1 < 0 || s1 >= M->n) {
+                            printf("输入无效，请重新输入：");
+                            clearInput();
+                            scanf("%d", &s1);
+                        }
+						printf("1. 修改景点名\n");
+						printf("2. 修改景点的简介\n");
+						printf("3. 修改景点名和景点的简介\n");
+						printf("请输入要执行的操作：");
+						i = -1;
+						name = (char *)malloc(sizeof(char));
+                        intro = (char *)malloc(sizeof(char));
+                        while (i < 1 || i >= 4) {
+                            printf("输入无效，请重新输入：");
+                            clearInput();
+                            scanf("%d", &i);
+                        }
+						switch (i) {
+							case 1:
+								printf("请输入新的景点名：");
+								scanf("%s", name);
+								M->spots[s1].name = name;
+								break;
+							case 2:
+								printf("请输入新的简介：");
+								scanf("%s", intro);
+								M->spots[s1].intro = intro;
+								break;
+							case 3:
+							    printf("请输入新的景点名：");
+								scanf("%s", name);
+								M->spots[s1].name = name;
+								printf("请输入新的简介：");
+								scanf("%s", intro);
+								M->spots[s1].intro = intro;
+								break;
+							default:
+								break;
+						}
                         break;
                     //增加道路
                     case 4:
-                        break;
+                        s1 = -1;
+						s2 = -1;
+                        spots(*M);
+                        printf("请输入要增加道路的起点和终点序号（中间用空格隔开）：");
+                        clearInput();
+                        scanf("%d %d", &s1, &s2);
+                        while (s1 < 0 || s1 >= M->n || s2 < 0 || s2 >= M->n || s1 == s2) {
+                            printf("输入无效，请重新输入：");
+                            clearInput();
+                            scanf("%d %d", &s1, &s2);
+                        }
+
+					break;
                     //删除道路
                     case 5:
                         break;
